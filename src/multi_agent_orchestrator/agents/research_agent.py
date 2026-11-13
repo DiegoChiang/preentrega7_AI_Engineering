@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from multi_agent_orchestrator.state import OrchestratorState, ResearchFinding
 from multi_agent_orchestrator.tools import search_incident_knowledge
@@ -30,24 +30,37 @@ class ResearchAgent:
             {"query": state["request"], "limit": 3}
         )
         findings: list[ResearchFinding] = json.loads(tool_output)
-        narrative = await self._writer.ainvoke(
-            [
-                SystemMessage(
-                    content=(
-                        "Eres especialista en investigacion operativa. Resume los hallazgos sin "
-                        "inventar fuentes ni metricas. Identifica los focos que debe revisar el "
-                        "analista."
-                    )
+        try:
+            narrative = await self._writer.ainvoke(
+                [
+                    SystemMessage(
+                        content=(
+                            "Eres especialista en investigacion operativa. Resume los hallazgos "
+                            "sin inventar fuentes ni metricas. Identifica los focos que debe "
+                            "revisar el analista."
+                        )
+                    ),
+                    HumanMessage(
+                        content=(
+                            f"Instruccion del supervisor: {state['supervisor_instruction']}\n"
+                            f"Solicitud: {state['request']}\n"
+                            "Evidencia de la herramienta: "
+                            f"{json.dumps(findings, ensure_ascii=False)}"
+                        )
+                    ),
+                ]
+            )
+        except ValidationError:
+            narrative = ResearchNarrative(
+                summary=(
+                    f"Se recuperaron {len(findings)} fuentes documentales para analizar "
+                    f"{state['request']}"
                 ),
-                HumanMessage(
-                    content=(
-                        f"Instruccion del supervisor: {state['supervisor_instruction']}\n"
-                        f"Solicitud: {state['request']}\n"
-                        f"Evidencia de la herramienta: {json.dumps(findings, ensure_ascii=False)}"
-                    )
-                ),
-            ]
-        )
+                focus_areas=list(
+                    dict.fromkeys(tag for item in findings for tag in item["tags"])
+                )[:4]
+                or ["evidencia"],
+            )
         source_ids = [item["source_id"] for item in findings]
         return {
             "research_findings": findings,

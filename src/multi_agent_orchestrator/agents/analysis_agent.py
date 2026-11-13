@@ -6,7 +6,7 @@ import json
 from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from multi_agent_orchestrator.state import AnalysisResult, OrchestratorState
 from multi_agent_orchestrator.tools import calculate_incident_priority
@@ -29,25 +29,37 @@ class AnalysisAgent:
         metrics = self._collect_metrics(state)
         tool_output = await calculate_incident_priority.ainvoke(metrics)
         calculation = json.loads(tool_output)
-        narrative = await self._writer.ainvoke(
-            [
-                SystemMessage(
-                    content=(
-                        "Eres especialista en analisis de incidentes. Explica los factores del "
-                        "puntaje y propone una accion concreta. Usa solo las metricas y fuentes "
-                        "dadas."
-                    )
+        try:
+            narrative = await self._writer.ainvoke(
+                [
+                    SystemMessage(
+                        content=(
+                            "Eres especialista en analisis de incidentes. Explica los factores "
+                            "del puntaje y propone una accion concreta. Usa solo las metricas y "
+                            "fuentes dadas."
+                        )
+                    ),
+                    HumanMessage(
+                        content=(
+                            f"Instruccion del supervisor: {state['supervisor_instruction']}\n"
+                            f"Metricas: {json.dumps(metrics, ensure_ascii=False)}\n"
+                            f"Calculo: {tool_output}\n"
+                            f"Fuentes: "
+                            f"{json.dumps(state['research_findings'], ensure_ascii=False)}"
+                        )
+                    ),
+                ]
+            )
+        except ValidationError:
+            components = calculation["components"]
+            strongest = sorted(components, key=components.get, reverse=True)[:2]
+            narrative = AnalysisNarrative(
+                drivers=[f"Componente {name}: {components[name]} puntos" for name in strongest],
+                recommendation=(
+                    "Aplicar el runbook asociado, monitorear los indicadores citados y escalar "
+                    "si el puntaje de riesgo aumenta."
                 ),
-                HumanMessage(
-                    content=(
-                        f"Instruccion del supervisor: {state['supervisor_instruction']}\n"
-                        f"Metricas: {json.dumps(metrics, ensure_ascii=False)}\n"
-                        f"Calculo: {tool_output}\n"
-                        f"Fuentes: {json.dumps(state['research_findings'], ensure_ascii=False)}"
-                    )
-                ),
-            ]
-        )
+            )
         result: AnalysisResult = {
             "priority": self._priority(calculation["priority"]),
             "risk_score": float(calculation["risk_score"]),
