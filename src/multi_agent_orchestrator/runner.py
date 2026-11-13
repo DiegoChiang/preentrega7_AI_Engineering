@@ -38,6 +38,9 @@ async def run_orchestrator(
         "contributions": [],
         "completed_agents": [],
         "task_completed": False,
+        "requires_approval": False,
+        "approval_status": "not_required",
+        "approval_request": None,
         "final_answer": "",
     }
     trace: list[dict[str, Any]] = []

@@ -57,6 +57,12 @@ class AnalysisAgent:
         }
         return {
             "analysis_result": result,
+            "requires_approval": result["priority"] == "P1" or result["risk_score"] >= 75,
+            "approval_status": (
+                "pending"
+                if result["priority"] == "P1" or result["risk_score"] >= 75
+                else "not_required"
+            ),
             "contributions": [
                 {
                     "agent": "analyst",

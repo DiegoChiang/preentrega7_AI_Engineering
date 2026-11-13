@@ -1,38 +1,40 @@
-# Arquitectura del orquestador
+# Arquitectura operativa
 
-## Responsabilidades
+## Recepción y backpressure
 
-`Supervisor` recibe un resumen del estado y devuelve `RouteDecision`, un contrato Pydantic cuyo
-`next_agent` solo admite nodos existentes. La decision conserva una justificacion y una instruccion
-especifica para el especialista.
+FastAPI valida el cuerpo con `JobCreate`, crea un UUID, persiste `QUEUED` y usa `put_nowait` sobre una
+`asyncio.Queue` acotada. La respuesta no espera al modelo. Cuando la cola está llena, el trabajo queda
+en `FAILED` y la API devuelve `503`.
 
-`ResearchAgent` consulta una base documental local mediante `search_incident_knowledge`. Su salida
-mantiene cada hallazgo separado, con metricas e identificador de fuente.
+## Persistencia
 
-`AnalysisAgent` agrega las metricas recuperadas e invoca `calculate_incident_priority`. La formula
-pondera tasa de errores, latencia p95, usuarios afectados y duracion. El modelo explica los factores
-y propone una mitigacion, pero no altera el resultado numerico de la herramienta.
+`RedisJobRepository` guarda contratos JSON en hashes `agent-job:{job_id}` y renueva su TTL con cada
+transición. Este registro sirve al polling de clientes y conserva errores del background worker.
 
-`validate_result` aplica controles reproducibles sobre cobertura, trazabilidad y rango. La aprobacion
-queda en `task_completed`; cualquier observacion queda en `validation_feedback`.
+`AsyncRedisSaver` mantiene el estado interno de LangGraph. La configuración
+`configurable.thread_id = job_id` vincula los checkpoints con el trabajo y permite reanudar el mismo
+grafo después de una pausa o reinicio.
 
-`Synthesizer` solo se ejecuta tras la aprobacion y recibe el pedido original, la evidencia y el
-analisis. No recibe metadata interna ni todo el historial de mensajes.
+## Human-in-the-loop
 
-## Decisiones de control
+El analista marca `requires_approval` para prioridad P1 o riesgo mayor o igual a 75. Tras validar la
+evidencia, el supervisor dirige el flujo al nodo `approval`. El nodo llama `interrupt()` con un
+payload serializable y el worker publica `WAITING_APPROVAL`.
 
-El modelo propone la ruta, y una guarda verifica sus prerrequisitos:
+El endpoint de aprobación valida que el trabajo esté esperando, lo vuelve a encolar y el worker
+invoca `Command(resume=decision)` con el mismo `thread_id`. Una aprobación retorna al supervisor; un
+rechazo salta a `END` y conserva el motivo.
 
-1. Sin evidencia, el destino es `researcher`.
-2. Con evidencia y sin analisis, el destino es `analyst`.
-3. Con ambos resultados y sin aprobacion, el destino es `validator`.
-4. Con aprobacion, el destino es `synthesizer`.
+## Observabilidad
 
-El modelo conserva la capacidad de elegir refinamientos cuando existe feedback. Las guardas evitan
-saltos invalidos y el contador `supervisor_steps` detiene una ejecucion que exceda ocho decisiones.
+`phoenix.otel.register` configura un exportador OTLP/HTTP. Cada ejecución del worker crea el span raíz
+`agent_job.execute`, mientras OpenInference instrumenta LangChain para producir spans de los modelos
+y componentes internos. El contexto contiene el identificador del trabajo, el worker y la condición
+de reanudación.
 
-## Aislamiento de contexto
+## Fallos
 
-Los especialistas no reciben el historial completo. El investigador recibe la solicitud, su
-instruccion y el resultado de su herramienta. El analista recibe la instruccion, las metricas, el
-calculo y las fuentes. El supervisor observa solo un resumen de completitud y validacion.
+La frontera del worker captura excepciones no controladas y persiste `FAILED`, tipo de excepción,
+mensaje y hora de finalización. El worker siempre libera la posición de la cola mediante
+`task_done()`. La cancelación durante el apagado se propaga y los clientes Redis se cierran de forma
+explícita en el lifespan de FastAPI.

@@ -7,8 +7,9 @@ from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langgraph.graph import MessagesState
 
-AgentName = Literal["researcher", "analyst", "validator", "synthesizer"]
-RouteTarget = Literal["researcher", "analyst", "validator", "synthesizer"]
+AgentName = Literal["researcher", "analyst", "validator", "approval", "synthesizer"]
+RouteTarget = Literal["researcher", "analyst", "validator", "approval", "synthesizer"]
+ApprovalStatus = Literal["not_required", "pending", "approved", "rejected"]
 
 
 class ResearchFinding(TypedDict):
@@ -47,5 +48,8 @@ class OrchestratorState(MessagesState):
     contributions: Annotated[list[Contribution], add]
     completed_agents: Annotated[list[AgentName], add]
     task_completed: bool
+    requires_approval: bool
+    approval_status: ApprovalStatus
+    approval_request: dict[str, object] | None
     final_answer: str
     last_error: NotRequired[str]

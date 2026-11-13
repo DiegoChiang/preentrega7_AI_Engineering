@@ -1,4 +1,4 @@
-"""Punto de entrada ejecutable."""
+"""Punto de entrada de la API."""
 
 from multi_agent_orchestrator.cli import main
 

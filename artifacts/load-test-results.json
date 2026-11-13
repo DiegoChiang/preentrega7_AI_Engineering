@@ -1,0 +1,39 @@
+{
+  "request_count": 5,
+  "concurrency": 5,
+  "p95_latency_seconds": 37.451,
+  "all_completed": true,
+  "jobs": [
+    {
+      "job_id": "93bb07d0-b9cd-4f68-b786-f590b6f06f9b",
+      "status": "COMPLETED",
+      "latency_seconds": 37.451,
+      "approval_used": true
+    },
+    {
+      "job_id": "35fd4bb3-295f-4434-a89f-9fc67c410ed0",
+      "status": "COMPLETED",
+      "latency_seconds": 30.125,
+      "approval_used": true
+    },
+    {
+      "job_id": "a6abdc2f-407e-4d49-8cf7-f3f5f8ee2df0",
+      "status": "COMPLETED",
+      "latency_seconds": 36.381,
+      "approval_used": true
+    },
+    {
+      "job_id": "f8421442-aced-46ae-ab72-2bf8d180de5c",
+      "status": "COMPLETED",
+      "latency_seconds": 33.221,
+      "approval_used": true
+    },
+    {
+      "job_id": "df0e0dc1-b24f-405e-a2c5-a6cf027b5828",
+      "status": "COMPLETED",
+      "latency_seconds": 26.926,
+      "approval_used": true
+    }
+  ],
+  "phoenix_dashboard": "http://localhost:6006"
+}

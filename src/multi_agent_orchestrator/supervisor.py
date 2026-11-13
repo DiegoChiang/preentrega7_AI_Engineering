@@ -38,6 +38,8 @@ class Supervisor:
             "analysis_result": state.get("analysis_result"),
             "validation_feedback": state.get("validation_feedback", []),
             "task_completed": state.get("task_completed", False),
+            "requires_approval": state.get("requires_approval", False),
+            "approval_status": state.get("approval_status", "not_required"),
             "completed_agents": state.get("completed_agents", []),
         }
         decision = await self._router.ainvoke(
@@ -47,8 +49,9 @@ class Supervisor:
                         "Eres el supervisor de un grafo jerarquico. Elige exactamente un nodo. "
                         "Usa researcher cuando falte evidencia o la validacion pida nuevas "
                         "fuentes; analyst cuando exista evidencia pero falte un calculo "
-                        "consistente; validator cuando haya investigacion y analisis; synthesizer "
-                        "solo cuando task_completed sea true. Entrega una instruccion concreta."
+                        "consistente; validator cuando haya investigacion y analisis; approval "
+                        "cuando el resultado validado sea critico y siga pendiente; synthesizer "
+                        "solo con validacion y aprobacion completas."
                     )
                 ),
                 HumanMessage(
@@ -82,6 +85,8 @@ class Supervisor:
         findings = state.get("research_findings", [])
         analysis = state.get("analysis_result")
         validated = state.get("task_completed", False)
+        requires_approval = state.get("requires_approval", False)
+        approval_status = state.get("approval_status", "not_required")
         feedback = state.get("validation_feedback", [])
 
         if not findings:
@@ -94,6 +99,8 @@ class Supervisor:
             return "analyst"
         if not validated:
             return "validator"
+        if requires_approval and approval_status == "pending":
+            return "approval"
         if target != "synthesizer":
             return "synthesizer"
         return target
@@ -108,4 +115,6 @@ class Supervisor:
             return f"Calcula la prioridad usando exclusivamente la evidencia disponible.{suffix}"
         if target == "validator":
             return "Comprueba cobertura, trazabilidad y consistencia antes de autorizar el cierre."
+        if target == "approval":
+            return "Solicita aprobacion humana antes de continuar con el resultado critico."
         return "Sintetiza una respuesta accionable con referencias a la evidencia validada."
